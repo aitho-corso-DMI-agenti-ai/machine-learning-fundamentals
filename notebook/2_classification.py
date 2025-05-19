@@ -31,7 +31,14 @@ def _():
     from sklearn.linear_model import LogisticRegression
     from sklearn import model_selection
     from sklearn.model_selection import StratifiedKFold
+
+    import warnings
+    from sklearn.exceptions import ConvergenceWarning
+
+    # Ignore ConvergenceWarning
+    warnings.filterwarnings("ignore", category = ConvergenceWarning)
     return (
+        ConvergenceWarning,
         LogisticRegression,
         StratifiedKFold,
         matplotlib,
@@ -39,6 +46,7 @@ def _():
         np,
         pd,
         plt,
+        warnings,
     )
 
 
@@ -77,7 +85,6 @@ def _(mo):
         \[
         P(y=1 \mid \mathbf{x}) = \sigma(z) = \sigma(\mathbf{w}^T \mathbf{x} + b) = \frac{1}{1 + e^{-(\mathbf{w}^T \mathbf{x} + b)}}
         \]
-
         """
     )
     return
@@ -113,46 +120,46 @@ def _(
     StratifiedKFold,
     X_train,
     features,
-    logistic,
     model_selection,
     np,
     plt,
     y_train,
 ):
-    simple_logistic = LogisticRegression(random_state=123)
+    simple_logistic = LogisticRegression(random_state=12345)
     simple_logistic.fit(X_train, y_train)
 
     slogistic_eval = model_selection.cross_val_score(simple_logistic, X_train, y_train, cv=StratifiedKFold(n_splits=10, random_state=1234, shuffle=True))
 
     print (f"Average accuracy = {np.average(slogistic_eval):3.2f} +/- {np.std(slogistic_eval): 3.2f}")
 
-    plt.bar(np.arange(len(features)), logistic.coef_[0], color='green',width=0.25)
-
+    plt.bar(np.arange(len(features)), simple_logistic.coef_[0], color='green',width=0.25)
+    simple_logistic
     return simple_logistic, slogistic_eval
-
-
-app._unparsable_cell(
-    r"""
-    Questions
-
-    * Are the performance 'good'?
-    * Can the parameters be optimized?
-    * Are there other better performing models?
-    """,
-    name="_"
-)
 
 
 @app.cell
 def _(mo):
-    mo.md(r"""## Hyper parameter tuning""")
+    mo.md(
+        """
+        Questions
+
+        * Are the performance good?
+        * Can the parameters be optimized?
+        * Are there other better performing models?
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""### Hyper parameter tuning""")
     return
 
 
 @app.cell
 def _():
     from sklearn.model_selection import GridSearchCV
-
     return (GridSearchCV,)
 
 
@@ -161,7 +168,8 @@ def _(GridSearchCV, LogisticRegression, StratifiedKFold, X_train, y_train):
     param_grid = {
         'C': [0.01, 1],                       # Reguralizzation
         'penalty': ['l2', 'l1'],              # L1/L2 (solo 'l2' se solver='lbfgs')
-        'class_weight': ['balanced', None]    # Add class weight
+        'class_weight': ['balanced', None],   # Add class weight
+        'solver': ['liblinear']               # Algorithm to use in the optimization problem
 
     }
 
@@ -178,6 +186,7 @@ def _(GridSearchCV, LogisticRegression, StratifiedKFold, X_train, y_train):
     print("Best model:", grid_search.best_estimator_)
 
     optimized_logistic = grid_search.best_estimator_
+    optimized_logistic
     return cv_strategy, grid_search, log_reg, optimized_logistic, param_grid
 
 
@@ -193,15 +202,6 @@ def _(grid_search, np):
 
 
 @app.cell
-def _(grid_search):
-    grid_search.cv_results_
-
-
-
-    return
-
-
-@app.cell
 def _(
     StratifiedKFold,
     X_train,
@@ -212,7 +212,7 @@ def _(
 ):
     optimized_logistic_eval = model_selection.cross_val_score(optimized_logistic, X_train, y_train, cv=StratifiedKFold(n_splits=10, random_state=1234, shuffle=True))
 
-    print (f"Average accuracy = {np.average(optimized_logistic):3.2f} +/- {np.std(optimized_logistic): 3.2f}")
+    print (f"Average accuracy = {np.average(optimized_logistic_eval):3.2f} +/- {np.std(optimized_logistic_eval): 3.2f}")
 
     return (optimized_logistic_eval,)
 
@@ -220,8 +220,157 @@ def _(
 @app.cell
 def _(mo):
     mo.md(
+        """
+        ## Multi Layer Perceptron
+
+        -- Keras
+        """
+    )
+    return
+
+
+@app.cell
+def _():
+    from tensorflow.keras.callbacks import EarlyStopping
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Dense, Input
+    from tensorflow.keras.optimizers import Adam
+    return Adam, Dense, EarlyStopping, Input, Sequential
+
+
+@app.cell
+def _(Adam, Dense, Input, Sequential, X_train):
+    input_dim = X_train.shape[1]
+
+    def build_model():
+    # Costruzione del modello
+    
+        model_ = Sequential([
+            Input(shape=(input_dim,)),        # Primo layer di input
+            Dense(16, activation='relu'),     # Hidden layer con 16 neuroni
+            Dense(1, activation='sigmoid')    # Output layer per classificazione binaria
+        ])
+    
+        model_.compile(
+            optimizer=Adam(learning_rate=0.001),
+            loss='binary_crossentropy',
+            metrics=['accuracy']
+        )
+        return model_
+
+    model = build_model()
+    model.summary()
+    return build_model, input_dim, model
+
+
+@app.cell
+def _(EarlyStopping, X_train, model, y_train):
+    early_stop = EarlyStopping(
+        monitor='val_accuracy',
+        patience=15,                 # number of epochs to wait before stopping
+        restore_best_weights=True,
+    )
+
+    history = model.fit(
+        X_train, y_train,
+        epochs=100,
+        batch_size=32,
+        validation_split=0.2,
+        callbacks=[early_stop]
+    )
+    return early_stop, history
+
+
+@app.cell
+def _(history):
+    final_train_acc = history.history['accuracy'][-1]
+    final_val_acc = history.history['val_accuracy'][-1]
+
+    print(f"Accuracy finale sul training set: {final_train_acc:.4f}")
+    print(f"Accuracy finale sul validation set: {final_val_acc:.4f}")
+    return final_train_acc, final_val_acc
+
+
+@app.cell
+def _(history, plt):
+    # Tracciamento della curva della perdita
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='Training loss')
+    plt.plot(history.history['val_loss'], label='Validation loss')
+    plt.title('Loss in time')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    # Tracciamento della curva dell'accuratezza
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['accuracy'], label='Training accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation accuracy')
+    plt.title('Accuracy in time')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+    return
+
+
+@app.cell
+def _():
+    # Cross validation for estimating performances
+    return
+
+
+@app.cell
+def _(
+    StratifiedKFold,
+    X_train,
+    accuracy_score,
+    build_model,
+    early_stop,
+    np,
+    y_train,
+):
+    def cv_scores():
+        kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=1234)
+        keras_scores = []
+    
+        for train_idx, val_idx in kf.split(X_train, y_train):
+            X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
+        
+            model = build_model()
+            model.fit(
+                X_tr, 
+                y_tr,
+                epochs=100,
+                batch_size=32,
+                validation_split=0.2,
+                callbacks=[early_stop],
+            )
+        
+            y_pred = (model.predict(X_val) > 0.5).astype("int32")
+            acc = accuracy_score(y_val, y_pred)
+            keras_scores.append(acc)
+    
+        keras_scores = np.array(keras_scores)
+        return keras_scores
+
+    keras_scores = cv_scores()
+    print("Cross-validated accuracies del modello Keras:", keras_scores)
+    print("Media accuracy:", keras_scores.mean())
+
+    return cv_scores, keras_scores
+
+
+@app.cell
+def _(mo):
+    mo.md(
         r"""
-        ## Comparing models
+        # Comparing models
 
         Although all the models have been evaluated have been evaluated with cross-validation, we don't know whether the folds are the same. Thus for instance we don't know if the first element in the evaluation array was measured on the same fold over all the algorithms. Accordingly, we need to apply **unpaired t-Test**.
 
@@ -238,35 +387,40 @@ def _():
 
 
 @app.cell
-def _(
-    RandomForestClassifier,
-    StratifiedKFold,
-    X_train,
-    model_selection,
-    np,
-    y_train,
-):
-    rf = RandomForestClassifier(n_estimators=40, max_depth=None, min_samples_split=2, random_state=0)
-    rf_eval = model_selection.cross_val_score(rf, X_train, y_train, cv=StratifiedKFold(n_splits=10,random_state=52725,shuffle=True))
-
-    print(f"Random Forest :{np.average(rf_eval): 4.3f} +/- {np.std(rf_eval): 4.3f}")
-    return rf, rf_eval
-
-
-@app.cell
-def _(rf_eval, slogistic_eval, stats):
+def _():
     def PrintSignificance(stat, alpha):
         if (stat[1]<alpha):
             print(f"The difference is statistically significant (α {alpha:3.2f})")
         else:
             print(f"The difference is not statistically significant (α={alpha:3.2f})")
-        
-    alpha = 0.05
 
-    unpaired_lr_rf = stats.ttest_ind(slogistic_eval, rf_eval)
-    print("Logistic Regression vs Random Forests: p-value = %4.3f"%unpaired_lr_rf[1])
-    PrintSignificance(unpaired_lr_rf, alpha)
-    return PrintSignificance, alpha, unpaired_lr_rf
+    alpha = 0.01
+
+    return PrintSignificance, alpha
+
+
+@app.cell
+def _(
+    PrintSignificance,
+    alpha,
+    optimized_logistic_eval,
+    slogistic_eval,
+    stats,
+):
+    unpaired_slr_olr = stats.ttest_ind(slogistic_eval, optimized_logistic_eval)
+    print("\033[1m Simple Logistic Regression vs Optimezed Logistic Regression \033[0m ")
+    print("p-value = %4.3f"%unpaired_slr_olr[1])
+    PrintSignificance(unpaired_slr_olr, alpha)
+    return (unpaired_slr_olr,)
+
+
+@app.cell
+def _(PrintSignificance, alpha, keras_scores, slogistic_eval, stats):
+    unpaired_slr_mlp= stats.ttest_ind(slogistic_eval, keras_scores)
+    print("\033[1m Simple Logistic Regression vs Multi layer perceptron \033[0m ")
+    print("p-value = %4.3f"%unpaired_slr_mlp[1])
+    PrintSignificance(unpaired_slr_mlp, alpha)
+    return (unpaired_slr_mlp,)
 
 
 @app.cell
@@ -283,8 +437,9 @@ def _(mo):
 
 @app.cell
 def _():
-    from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
     return (
+        accuracy_score,
         confusion_matrix,
         f1_score,
         precision_score,
@@ -294,14 +449,15 @@ def _():
 
 
 @app.cell
-def _(X_test, logistic):
-    y_pred = logistic.predict(X_test)
+def _(X_test, simple_logistic):
+    y_pred = simple_logistic.predict(X_test)
     return (y_pred,)
 
 
 @app.cell
 def _(
     X_test,
+    accuracy_score,
     confusion_matrix,
     f1_score,
     matplotlib,
@@ -332,7 +488,7 @@ def _(
 
         # Compute confusion matrix
         cm = confusion_matrix(y_true, y_pred)
- 
+
         fig, ax = plt.subplots(figsize=(10,7))
         im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
         ax.figure.colorbar(im, ax=ax)
@@ -363,9 +519,10 @@ def _(
     print("Number of observation:",len(X_test))
     print("True Label:", y_test.sum())
     print(f"Ratio between number of frauds and total observations: {round(100*y_test.mean(),3)}%")
-    print("Predicted frauds:",y_pred.sum())
+    print(f"Predicted frauds: {y_pred.sum()}\n")
 
 
+    print(f"Accuracy: {round(100*accuracy_score(y_test,y_pred),3)}%")
     print(f"Precision: {round(100*precision_score(y_test,y_pred),3)}%")
     print(f"Recall: {round(100*recall_score(y_test,y_pred),3)}%")
     print(f"F1: {round(100*f1_score(y_test,y_pred),3)}%")
@@ -381,11 +538,6 @@ app._unparsable_cell(
     """,
     name="_"
 )
-
-
-@app.cell
-def _():
-    return
 
 
 if __name__ == "__main__":

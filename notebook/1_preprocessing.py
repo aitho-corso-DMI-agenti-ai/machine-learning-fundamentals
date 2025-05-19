@@ -33,7 +33,7 @@ def _(mo):
 
 @app.cell
 def _():
-    #libraries
+    # libraries
     import pandas as pd
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -42,22 +42,27 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(r"""## Reading Data""")
+    mo.md(r"""## Data Analysis""")
     return
 
 
 @app.cell
-def _():
-    data_path = r"data"
-    data_name = "insurance_claims.csv"
-    return data_name, data_path
+def _(pd):
+    data_filename = r"data\insurance_claims.csv"
+    raw_df = pd.read_csv(data_filename)
+    raw_df.head()
+    return data_filename, raw_df
 
 
 @app.cell
-def _(data_name, data_path, pd):
-    raw_df = pd.read_csv(rf"{data_path}\\{data_name}")
-    raw_df.head()
-    return (raw_df,)
+def _(pd, raw_df):
+    date_cols = ["policy_bind_date", "incident_date"]
+
+    df = raw_df.drop('_c39', axis=1)
+    df['days_start_incident'] = (pd.to_datetime(df['incident_date']) - pd.to_datetime(df['policy_bind_date'])).dt.days
+
+    df.head()
+    return date_cols, df
 
 
 @app.cell
@@ -69,85 +74,83 @@ def _(raw_df):
 
 
 @app.cell
-def _():
-    ## Missing columns
+def _(mo):
+    mo.md("""## Missing columns""")
     return
 
 
 @app.cell
-def _(raw_df):
-    # remove `_c39` asit is likely an erorr column
-
-    raw_df.drop(columns=['_c39'], inplace=True)
-    return
-
-
-@app.cell
-def _(pd, raw_df):
+def _(df, pd):
     # Checking missing values
     # Function to calculate missing values by column# Funct 
     def missing_values_table(df):
             # Total missing values
             mis_val = df.isnull().sum()
-        
+
             # Percentage of missing values
             mis_val_percent = 100 * df.isnull().sum() / len(df)
-        
+
             # Make a table with the results
             mis_val_table = pd.concat([mis_val, mis_val_percent], axis=1)
-        
+
             # Rename the columns
             mis_val_table_ren_columns = mis_val_table.rename(
             columns = {0 : 'Missing Values', 1 : '% of Total Values'})
-        
+
             # Sort the table by percentage of missing descending
             mis_val_table_ren_columns = mis_val_table_ren_columns[
                 mis_val_table_ren_columns.iloc[:,1] != 0].sort_values(
             '% of Total Values', ascending=False).round(1)
-        
+
             # Print some summary information
             print ("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"      
                 "There are " + str(mis_val_table_ren_columns.shape[0]) +
                   " columns that have missing values.")
-        
+
             # Return the dataframe with missing information
             return mis_val_table_ren_columns
 
     # Missing values statistics
-    missing_values = missing_values_table(raw_df)
+    missing_values = missing_values_table(df)
     missing_values
     return missing_values, missing_values_table
 
 
 @app.cell
-def _(raw_df):
+def _(df):
+    df['authorities_contacted'].value_counts(dropna=False)
+    return
+
+
+@app.cell
+def _(df):
     # numerical: discrete
     discrete_cols = [
-        var for var in raw_df.columns if raw_df[var].dtype != 'O' and var != 'fraud_reported'
-        and raw_df[var].nunique() < 10
+        var for var in df.columns if df[var].dtype != 'O' and var not in ['fraud_reported']
+        and df[var].nunique() < 10
     ]
 
-    discrete_cols
+    df[discrete_cols].head()
     return (discrete_cols,)
 
 
 @app.cell
-def _(discrete_cols, raw_df):
+def _(df, discrete_cols):
 
     # numerical: continuous
     continuous_cols = [
-        var for var in raw_df.columns
-        if raw_df[var].dtype != 'O' and var != 'fraud_reported' and var not in discrete_cols
+        var for var in df.columns
+        if df[var].dtype != 'O' and var != 'fraud_reported' and var not in discrete_cols
     ]
 
-    continuous_cols
+    df[continuous_cols].head()
     return (continuous_cols,)
 
 
 @app.cell
-def _(raw_df):
-    categorical_cols = [var for var in raw_df.columns if raw_df[var].dtype == 'O' and var != 'fraud_reported']
-    categorical_cols
+def _(date_cols, df):
+    categorical_cols = [var for var in df.columns if df[var].dtype == 'O' and var != 'fraud_reported' and var not in date_cols]
+    df[categorical_cols].head()
     return (categorical_cols,)
 
 
@@ -164,7 +167,7 @@ def _(mo):
 
 
 @app.cell
-def _(continuous_cols, discrete_cols, plt, raw_df, sns):
+def _(continuous_cols, df, discrete_cols, plt, sns):
     sns.set(style="white")
 
     # Set up the matplotlib figure
@@ -173,7 +176,7 @@ def _(continuous_cols, discrete_cols, plt, raw_df, sns):
     # Generate a custom diverging colormap
     cmap = sns.diverging_palette(220, 10, as_cmap=True)
 
-    sns.heatmap(raw_df[discrete_cols + continuous_cols].corr(), cmap=cmap, vmax=.3, center=0,annot=True,
+    sns.heatmap(df[discrete_cols + continuous_cols].corr(), cmap=cmap, vmax=.3, center=0,annot=True,
                 square=True, linewidths=.5, cbar_kws={"shrink": .5})
     return ax, cmap, f
 
@@ -185,27 +188,48 @@ def _():
 
 
 @app.cell
-def _(pd, raw_df):
+def _(df, pd):
     colum_name =[]
     unique_value=[]
     # Iterate through the columns
-    for col in raw_df:
-        if raw_df[col].dtype == 'object':
+    for col in df:
+        if df[col].dtype == 'object':
             # If 2 or fewer unique categories
             colum_name.append(str(col)) 
-            unique_value.append(raw_df[col].nunique())
+            unique_value.append(df[col].nunique())
     table= pd.DataFrame()
     table['Col_name'] = colum_name
     table['Value']= unique_value
-            
+
     table=table.sort_values('Value',ascending=False)
     table
     return col, colum_name, table, unique_value
 
 
 @app.cell
-def _():
+def _(df, table):
+    df[table.Col_name[:4]].head()
     return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""## Target variable""")
+    return
+
+
+@app.cell
+def _(df, sns):
+    label_col = "fraud_reported"
+
+    val_count = (df[label_col].value_counts() / len(df[label_col])*100).round(1)
+
+    print(f"Value distribution in percentage: \n {val_count}")
+    print('-'*30)
+
+    sns.countplot(x=df['fraud_reported'])
+
+    return label_col, val_count
 
 
 @app.cell
@@ -221,108 +245,24 @@ def _(mo):
 
 
 @app.cell
-def _(raw_df):
-    mapping_dict={'Sunday':'Sun','Monday': 'Mon','Tuesday':'Tues',
-                  'Wednesday':'Weds','Thursday':'Thurs','Friday':'Fri','Saturday':'Sat'}
-
-
-    # convert features in datetime objects
-
-    df = raw_df.astype({
-        'policy_bind_date': 'datetime64[s]', 
-        'incident_date': 'datetime64[s]'}
-                   ,)
-
-
-    df['days_start_incident'] = (df['incident_date'] - df['policy_bind_date']).dt.days
-
-    df['day_of_week'] = df['incident_date'].dt.day_name()#.map(mapping_dict)
-    df.head()
-
-    return df, mapping_dict
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""# drop to variables cols""")
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""## Target analysis""")
-    return
-
-
-@app.cell
-def _(df, sns):
-
-    def categorical_distribution(df, var_list, min_unique=0):
-        for column in var_list:
-            print('Number of unique values in {} : {}'.format(column, df[column].nunique()))
-            print("Value distribution in percentage of '{0:s}' : \n{1}".format(column,(df[column].value_counts()/len(df[column])*100).round(1)))
-            print('-'*30)
-
-    _ = categorical_distribution(df, ['fraud_reported'])
-
-
-    sns.countplot(x='fraud_reported', data=df)
-
-    return (categorical_distribution,)
-
-
-@app.cell
-def _():
-    ## missing data
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _(df):
-    df.drop(['_c39','incident_location', 'insured_zip','policy_number', 
-                       'policy_bind_date', 'incident_date'], axis= 1, inplace = True)
-
-    return
-
-
-@app.cell
 def _():
     ## Train test Split
     return
 
 
 @app.cell
-def _(df, train_test_split):
+def _(df):
+    from sklearn.model_selection import train_test_split
 
-    target_map = {'Y': True, 'N': False}
-    y = df['fraud_reported'].map(target_map)
 
+    y = df['fraud_reported'].map({'Y': True, 'N': False})
     X = df.drop('fraud_reported', axis=1)
 
-    X_train, t_train, X_test, y_test = train_test_split(X, y, test_size=0.2, random_state=123, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=123, stratify=y)
 
     X_train = X_train.reset_index(drop=True)
     X_test = X_test.reset_index(drop=True)
-
-    # _ = categorical_distribution(train, ['fraud_reported'])
-    # _ = categorical_distribution(test, ['fraud_reported'])
-    return X, X_test, X_train, t_train, target_map, y, y_test
-
-
-@app.cell
-def _(y):
-    y
-    return
+    return X, X_test, X_train, train_test_split, y, y_test, y_train
 
 
 @app.cell
@@ -332,35 +272,113 @@ def _(mo):
 
 
 @app.cell
-def _(OneHotEncoder, X_train, column_to_encode, pd, train):
-    encoder=OneHotEncoder(handle_unknown='ignore')
-    from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import OneHotEncoder
+def _(pd):
+    import numpy as np
+    from sklearn.base import BaseEstimator, TransformerMixin
 
+    class DateFeatureExtractor(BaseEstimator, TransformerMixin):
+        def fit(self, X, y=None):
+            self.output_features_ = []
+            for col in X.columns:
+                self.output_features_.extend([
+                    f"{col}_anno",
+                    f"{col}_mese",
+                    f"{col}_giorno_settimana"
+                ])
+            return self
 
-    train_encoded = pd.DataFrame(encoder.fit_transform(X_train[column_to_encode]))
-    train_encoded.columns = encoder.get_feature_names(column_to_encode)
-    train.drop(column_to_encode ,axis=1, inplace=True)
+        def transform(self, X):
+            df = X.copy()
+            for col in df.columns:
+                parsed = pd.to_datetime(df[col], errors='coerce')
+                df[f'{col}_anno'] = parsed.dt.year
+                df[f'{col}_mese'] = parsed.dt.month
+                df[f'{col}_giorno_settimana'] = parsed.dt.dayofweek
+            return df[self.output_features_]
 
-    OH_train= pd.concat([train, train_encoded], axis=1)
-    return OH_train, OneHotEncoder, encoder, train_encoded, train_test_split
+        def get_feature_names_out(self, input_features=None):
+            return np.array(self.output_features_)
+
+    return BaseEstimator, DateFeatureExtractor, TransformerMixin, np
 
 
 @app.cell
-def _(OneHotEncoder, categorical_cols, continuous_cols):
+def _(
+    DateFeatureExtractor,
+    categorical_cols,
+    continuous_cols,
+    date_cols,
+    discrete_cols,
+):
     from sklearn.compose import ColumnTransformer
 
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import StandardScaler,  FunctionTransformer, OneHotEncoder
 
 
-    column_transformer = ColumnTransformer([
-        ("categories", OneHotEncoder(handle_unknown='infrequent_if_exist', min_frequency=0.05, max_categories=15), categorical_cols),
-        ("scale",  StandardScaler(), continuous_cols)
-    ], remainder='passthrough', n_jobs=-1
+    preprocessor = ColumnTransformer(
+        [
+            ("categories", OneHotEncoder(handle_unknown='infrequent_if_exist', min_frequency=0.05, max_categories=5), categorical_cols),
+            ("scale",  StandardScaler(), continuous_cols),
+            ("identity", "passthrough", discrete_cols),
+            ("dates",  DateFeatureExtractor(), date_cols)
+            ], 
+        remainder='drop',
+        n_jobs=-1
     )
 
-    column_transformer
-    return ColumnTransformer, StandardScaler, column_transformer
+    preprocessor
+    return (
+        ColumnTransformer,
+        FunctionTransformer,
+        OneHotEncoder,
+        StandardScaler,
+        preprocessor,
+    )
+
+
+@app.cell
+def _(X_test, X_train, pd, preprocessor):
+    # Applico il preprocessor al dataset
+
+    X_train_prep = preprocessor.fit_transform(X_train)
+    feature_names = preprocessor.get_feature_names_out()
+
+    X_test_prep = preprocessor.transform(X_test)
+
+
+    X_train_prep_df = pd.DataFrame(X_train_prep, columns=feature_names, index=X_train.index)
+    X_test_prep_df = pd.DataFrame(X_test_prep, columns=feature_names, index=X_test.index)
+
+
+    X_train_prep_df.head()
+    return (
+        X_test_prep,
+        X_test_prep_df,
+        X_train_prep,
+        X_train_prep_df,
+        feature_names,
+    )
+
+
+@app.cell
+def _(mo):
+    mo.md("""## Save dataset""")
+    return
+
+
+@app.cell
+def _(X_test_prep_df, X_train_prep_df, y_test, y_train):
+    # Salvataggio unico
+
+    df_train = X_train_prep_df.copy()
+    df_train['fraud_reported'] = y_train.values
+    df_train.to_csv("data/train_preprocessed.csv", index=False)
+
+
+    df_test = X_test_prep_df.copy()
+    df_test['fraud_reported'] = y_test.values
+    df_test.to_csv("data/test_preprocessed.csv", index=False)
+    return df_test, df_train
 
 
 @app.cell
