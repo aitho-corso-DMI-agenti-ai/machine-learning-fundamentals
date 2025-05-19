@@ -11,12 +11,6 @@ def _():
 
 
 @app.cell
-def _():
-    # Classification
-    return
-
-
-@app.cell
 def _(mo):
     mo.md(r"""# Classification""")
     return
