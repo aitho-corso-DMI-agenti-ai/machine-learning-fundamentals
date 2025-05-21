@@ -18,8 +18,6 @@ def _(mo):
 
         The aim of this notebook is to prepare the *Insurance claims* dataset to be ingested by the the model. 
         The dataset could be found on Kaggle searching for [Insurance claims dataset](https://www.kaggle.com/code/buntyshah/insurance-fraud-claims-detection).
-
-        <img src="img/Slide4.png" width="750">
         """
     )
     return
@@ -55,6 +53,14 @@ def _(pd):
 
 
 @app.cell
+def _(raw_df):
+    print('Dimensions of the dataset:', raw_df.shape)
+    raw_df.describe(include='all')
+
+    return
+
+
+@app.cell
 def _(pd, raw_df):
     date_cols = ["policy_bind_date", "incident_date"]
 
@@ -63,14 +69,6 @@ def _(pd, raw_df):
 
     df.head()
     return date_cols, df
-
-
-@app.cell
-def _(raw_df):
-    print('Dimensions of the dataset:', raw_df.shape)
-    raw_df.describe(include='all')
-
-    return
 
 
 @app.cell
@@ -136,7 +134,6 @@ def _(df):
 
 @app.cell
 def _(df, discrete_cols):
-
     # numerical: continuous
     continuous_cols = [
         var for var in df.columns

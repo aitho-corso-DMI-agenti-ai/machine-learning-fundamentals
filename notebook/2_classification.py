@@ -109,26 +109,30 @@ def _(np, plt):
 
 
 @app.cell
+def _(LogisticRegression, X_train, y_train):
+    simple_logistic = LogisticRegression(random_state=12345)
+    simple_logistic.fit(X_train, y_train)
+    simple_logistic
+    return (simple_logistic,)
+
+
+@app.cell
 def _(
-    LogisticRegression,
     StratifiedKFold,
     X_train,
     features,
     model_selection,
     np,
     plt,
+    simple_logistic,
     y_train,
 ):
-    simple_logistic = LogisticRegression(random_state=12345)
-    simple_logistic.fit(X_train, y_train)
-
     slogistic_eval = model_selection.cross_val_score(simple_logistic, X_train, y_train, cv=StratifiedKFold(n_splits=10, random_state=1234, shuffle=True))
 
-    print (f"Average accuracy = {np.average(slogistic_eval):3.2f} +/- {np.std(slogistic_eval): 3.2f}")
 
+    print(f"Average accuracy = {np.average(slogistic_eval):3.2f} +/- {np.std(slogistic_eval): 3.2f}")
     plt.bar(np.arange(len(features)), simple_logistic.coef_[0], color='green',width=0.25)
-    simple_logistic
-    return simple_logistic, slogistic_eval
+    return (slogistic_eval,)
 
 
 @app.cell
@@ -162,17 +166,21 @@ def _(GridSearchCV, LogisticRegression, StratifiedKFold, X_train, y_train):
     param_grid = {
         'C': [0.01, 1],                       # Reguralizzation
         'penalty': ['l2', 'l1'],              # L1/L2 (solo 'l2' se solver='lbfgs')
-        'class_weight': ['balanced', None],   # Add class weight
         'solver': ['liblinear']               # Algorithm to use in the optimization problem
-
     }
 
     log_reg = LogisticRegression(max_iter=1000)
-    cv_strategy = StratifiedKFold(n_splits=5, random_state=52725, shuffle=True)
+    cv_strategy = StratifiedKFold(n_splits=10, random_state=52725, shuffle=True)
 
 
     # 6. Grid Search con cross-validation
-    grid_search = GridSearchCV(log_reg, param_grid, cv=3, scoring='accuracy', verbose=1)
+    grid_search = GridSearchCV(
+        log_reg, 
+        param_grid,
+        cv=cv_strategy, 
+        scoring='accuracy', 
+        verbose=1
+    )
     grid_search.fit(X_train, y_train)
 
 
@@ -186,40 +194,20 @@ def _(GridSearchCV, LogisticRegression, StratifiedKFold, X_train, y_train):
 
 @app.cell
 def _(grid_search, np):
-    best_idx = np.nanargmax(grid_search.cv_results_['mean_test_score'])
+    best_idx = grid_search.best_index_
+
+    optimized_logistic_eval = np.array([grid_search.cv_results_[f"split{i}_test_score"][best_idx] for i in range(10)])
 
     mean_score = grid_search.cv_results_["mean_test_score"][best_idx]
     std_score = grid_search.cv_results_["std_test_score"][best_idx]
 
     print(f"Average accuracy = {mean_score:3.2f} +/- {std_score: 3.2f}")
-    return best_idx, mean_score, std_score
-
-
-@app.cell
-def _(
-    StratifiedKFold,
-    X_train,
-    model_selection,
-    np,
-    optimized_logistic,
-    y_train,
-):
-    optimized_logistic_eval = model_selection.cross_val_score(optimized_logistic, X_train, y_train, cv=StratifiedKFold(n_splits=10, random_state=1234, shuffle=True))
-
-    print (f"Average accuracy = {np.average(optimized_logistic_eval):3.2f} +/- {np.std(optimized_logistic_eval): 3.2f}")
-
-    return (optimized_logistic_eval,)
+    return best_idx, mean_score, optimized_logistic_eval, std_score
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        ## Multi Layer Perceptron
-
-        -- Keras
-        """
-    )
+    mo.md("""## Multi Layer Perceptron""")
     return
 
 
@@ -238,13 +226,13 @@ def _(Adam, Dense, Input, Sequential, X_train):
 
     def build_model():
     # Costruzione del modello
-    
+
         model_ = Sequential([
             Input(shape=(input_dim,)),        # Primo layer di input
             Dense(16, activation='relu'),     # Hidden layer con 16 neuroni
             Dense(1, activation='sigmoid')    # Output layer per classificazione binaria
         ])
-    
+
         model_.compile(
             optimizer=Adam(learning_rate=0.001),
             loss='binary_crossentropy',
@@ -331,11 +319,11 @@ def _(
     def cv_scores():
         kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=1234)
         keras_scores = []
-    
+
         for train_idx, val_idx in kf.split(X_train, y_train):
             X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
             y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
-        
+
             model = build_model()
             model.fit(
                 X_tr, 
@@ -345,11 +333,11 @@ def _(
                 validation_split=0.2,
                 callbacks=[early_stop],
             )
-        
+
             y_pred = (model.predict(X_val) > 0.5).astype("int32")
             acc = accuracy_score(y_val, y_pred)
             keras_scores.append(acc)
-    
+
         keras_scores = np.array(keras_scores)
         return keras_scores
 
@@ -532,6 +520,11 @@ app._unparsable_cell(
     """,
     name="_"
 )
+
+
+@app.cell
+def _():
+    return
 
 
 if __name__ == "__main__":
